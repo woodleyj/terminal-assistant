@@ -98,10 +98,11 @@ def setup_env():
     load_dotenv(ENV_FILE)
     api_key = os.getenv("GEMINI_TASS_API_KEY")
     user_aliases = get_user_aliases()
+    setup_done = os.getenv("TASS_SETUP_COMPLETE") == "True"
 
-    if not api_key or not user_aliases:
+    if not api_key or not setup_done:
         console.print(Text(TASS_BANNER, style="bold yellow"))
-        console.print(Panel("Terminal Assistant", expand=False, border_style="cyan"))
+        console.print(Panel(f"Terminal Assistant v{VERSION}", expand=False, border_style="cyan"))
         console.print("[bold green]Welcome to TASS![/bold green] Let's get you set up.")
         
         # API Key Setup
@@ -113,7 +114,7 @@ def setup_env():
             console.print(f"[dim]Key saved to {ENV_FILE}[/dim]")
 
         # Initial Alias Setup
-        if not user_aliases:
+        if not user_aliases and not setup_done:
             console.print("\n[bold cyan]Alias Setup (Optional)[/bold cyan]")
             console.print("Choose a custom name to use TASS (e.g., 'ask', 'ai'). Max 10 chars, alphanumeric.")
             console.print("[dim]Press Enter to skip and use 'tass' only.[/dim]")
@@ -127,6 +128,7 @@ def setup_env():
                     break
                 console.print("[bold red]Invalid alias! Try again.[/bold red]")
         
+        set_key(str(ENV_FILE), "TASS_SETUP_COMPLETE", "True")
         console.print("\n[bold green]Setup complete![/bold green]")
         load_dotenv(ENV_FILE)
         
