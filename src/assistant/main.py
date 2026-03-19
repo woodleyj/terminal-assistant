@@ -359,9 +359,18 @@ def handle_management_command(args):
         
     return False
 
-def get_tass_response(query, api_key, memory):
-    """Call Gemini API with streaming for a responsive feel."""
-    client = genai.Client(api_key=api_key)
+def run_query(query, api_key):
+    """Execute a query with streaming output and command breakdown."""
+    memory = load_memory()
+    console.print("[bold blue]Thinking...[/bold blue]")
+    
+    full_response = ""
+    header_captured = False
+    explanation_captured = False
+    header = ""
+    explanation = ""
+    breakdown = ""
+
     current_os = platform.system()
     current_shell = detect_shell()
     
@@ -382,81 +391,71 @@ def get_tass_response(query, api_key, memory):
     except KeyError as e:
         console.print(f"[bold red]System Prompt Error:[/bold red] Missing variable {e}")
         set_system_prompt("reset")
-        return get_tass_response(query, api_key, memory)
+        return run_query(query, api_key)
 
     try:
-        # Use streaming
+        client = genai.Client(api_key=api_key)
+        # Use streaming within the client context
         stream = client.models.generate_content_stream(
             model='gemini-2.0-flash', 
             config={'system_instruction': system_prompt},
             contents=query
         )
-        return stream
+
+        # Process stream
+        for chunk in stream:
+            text = chunk.text
+            full_response += text
+            
+            # Simple parsing logic for streaming
+            lines = full_response.split('\n')
+            if len(lines) > 1 and not header_captured:
+                header = lines[0].strip()
+                header_captured = True
+                if header.upper() == "NONE":
+                    console.print("\n[bold cyan]TASS:[/bold cyan] ", end="")
+                else:
+                    console.print("\n[bold white]Suggested Command:[/bold white]")
+                    console.print(Panel(Text(header, style="bold green"), border_style="cyan"))
+                    try:
+                        pyperclip.copy(header)
+                        console.print("[dim](Copied to clipboard)[/dim]")
+                    except (pyperclip.PyperclipException, Exception):
+                        pass
+
+            if len(lines) > 2 and not explanation_captured:
+                explanation = lines[1].strip()
+                explanation_captured = True
+                if header.upper() != "NONE":
+                    console.print(f"[italic]{explanation}[/italic]\n")
+                else:
+                    console.print(explanation, end="")
+
+            if explanation_captured:
+                # Print the rest as it comes
+                # This is a bit simplified for the demo/implementation
+                if header.upper() == "NONE":
+                    console.print(text.replace(lines[0] + '\n', '').replace(lines[1] + '\n', ''), end="")
+                else:
+                    if "BREAKDOWN:" in text or breakdown:
+                        breakdown += text
+        
+        if breakdown:
+            # Final polish on breakdown display
+            parts = breakdown.split("BREAKDOWN:")
+            if len(parts) > 1:
+                console.print(Panel(parts[1].strip(), title="Command Breakdown", border_style="dim"))
+
+        console.print()
+        save_memory(query, full_response)
+        
     except Exception as e:
         console.print(f"[bold red]Error calling Gemini API:[/bold red] {e}")
         sys.exit(1)
 
-def run_query(query, api_key):
-    """Execute a query with streaming output and command breakdown."""
-    memory = load_memory()
-    console.print("[bold blue]Thinking...[/bold blue]")
-    
-    full_response = ""
-    header_captured = False
-    explanation_captured = False
-    header = ""
-    explanation = ""
-    breakdown = ""
-
-    # Process stream
-    for chunk in get_tass_response(query, api_key, memory):
-        text = chunk.text
-        full_response += text
-        
-        # Simple parsing logic for streaming
-        lines = full_response.split('\n')
-        if len(lines) > 1 and not header_captured:
-            header = lines[0].strip()
-            header_captured = True
-            if header.upper() == "NONE":
-                console.print("\n[bold cyan]TASS:[/bold cyan] ", end="")
-            else:
-                console.print("\n[bold white]Suggested Command:[/bold white]")
-                console.print(Panel(Text(header, style="bold green"), border_style="cyan"))
-                try:
-                    pyperclip.copy(header)
-                    console.print("[dim](Copied to clipboard)[/dim]")
-                except (pyperclip.PyperclipException, Exception):
-                    pass
-
-        if len(lines) > 2 and not explanation_captured:
-            explanation = lines[1].strip()
-            explanation_captured = True
-            if header.upper() != "NONE":
-                console.print(f"[italic]{explanation}[/italic]\n")
-            else:
-                console.print(explanation, end="")
-
-        if explanation_captured:
-            # Print the rest as it comes
-            # This is a bit simplified for the demo/implementation
-            if header.upper() == "NONE":
-                console.print(text.replace(lines[0]+'\n', '').replace(lines[1]+'\n', ''), end="")
-            else:
-                if "BREAKDOWN:" in text or breakdown:
-                    breakdown += text
-    
-    if breakdown:
-        # Final polish on breakdown display
-        parts = breakdown.split("BREAKDOWN:")
-        if len(parts) > 1:
-            console.print(Panel(parts[1].strip(), title="Command Breakdown", border_style="dim"))
-
-    console.print()
-    save_memory(query, full_response)
-
 
 def check_for_updates():
+
     """Simple placeholder for update checking."""
     # In a real app, you might fetch from GitHub API or PyPI
     # For now, just a visual indicator of the version
