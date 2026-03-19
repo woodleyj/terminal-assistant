@@ -1,0 +1,31 @@
+[project]
+name = "terminal-assistant"
+version = "0.1.0"
+description = "Terminal Assistant (TASS) - A professional-grade lightweight Python CLI tool for terminal commands."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "Jonathan Woodley", email = "woodley.jonathan@gmail.com" }
+]
+dependencies = [
+    "google-genai",
+    "python-dotenv",
+    "rich",
+    "pyfiglet",
+    "psutil",
+    "pyperclip",
+    "questionary"
+]
+
+[project.scripts]
+tass = "assistant.main:main"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
