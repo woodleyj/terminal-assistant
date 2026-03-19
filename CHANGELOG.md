@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-03-19
 
 ### Added
+- **Smart Model Management**: Support for Gemini 3.x models (`gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite-preview`).
+- **Automated Model Fallback**: Automatically retry with a fallback model (default: `3.1-flash-lite`) if the primary model hits a quota limit (429).
 - **Streaming Responses**: AI feedback now streams in real-time for a more responsive feel.
 - **Command Breakdown**: Complex commands now include a "BREAKDOWN:" section deconstructing flags and syntax.
 - **Automated Shell Integration**: New `/integrate` command and interactive menu option to automatically add aliases to PowerShell `$PROFILE`, `.bashrc`, and `.zshrc`.

@@ -15,6 +15,8 @@
 
 ## 🚀 Key Features
 
+-   **Smart Model Management**: Choose between official 3.x models (`Pro`, `Flash`, `Flash-Lite`) to balance speed and power.
+-   **Automated Fallback**: Automatically switches to a lightweight model if your primary model's quota is reached.
 -   **OS & Shell Aware**: Automatically detects if you are using PowerShell, CMD, Bash, or Zsh to provide compatible syntax.
 -   **Streaming Responses**: Real-time AI feedback for a more responsive and "alive" feel.
 -   **Command Breakdown**: Deconstructs complex commands and flags to help you learn as you go.

@@ -31,6 +31,45 @@ MEMORY_FILE = ROOT_DIR / ".tass_memory.json"
 
 VERSION = "0.2.0"
 
+SUPPORTED_MODELS = [
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite-preview"
+]
+
+DEFAULT_MODEL = "gemini-3-flash-preview"
+DEFAULT_FALLBACK_MODEL = "gemini-3.1-flash-lite-preview"
+
+def get_current_model():
+    """Get the preferred model from .env."""
+    load_dotenv(ENV_FILE, override=True)
+    model = os.getenv("TASS_MODEL", DEFAULT_MODEL)
+    return model if model in SUPPORTED_MODELS else DEFAULT_MODEL
+
+def set_current_model(model):
+    """Set the preferred model in .env."""
+    if model in SUPPORTED_MODELS:
+        set_key(str(ENV_FILE), "TASS_MODEL", model)
+        console.print(f"[bold green]Model set to {model}.[/bold green]")
+        return True
+    return False
+
+def get_fallback_settings():
+    """Get fallback settings from .env."""
+    load_dotenv(ENV_FILE, override=True)
+    use_fallback = os.getenv("TASS_USE_FALLBACK_MODEL", "True") == "True"
+    fallback_model = os.getenv("TASS_FALLBACK_MODEL", DEFAULT_FALLBACK_MODEL)
+    if fallback_model not in SUPPORTED_MODELS:
+        fallback_model = DEFAULT_FALLBACK_MODEL
+    return use_fallback, fallback_model
+
+def set_fallback_settings(use_fallback, fallback_model):
+    """Set fallback settings in .env."""
+    set_key(str(ENV_FILE), "TASS_USE_FALLBACK_MODEL", str(use_fallback))
+    if fallback_model in SUPPORTED_MODELS:
+        set_key(str(ENV_FILE), "TASS_FALLBACK_MODEL", fallback_model)
+    console.print(f"[bold green]Fallback settings updated (Enabled: {use_fallback}, Model: {fallback_model}).[/bold green]")
+
 DEFAULT_SYSTEM_PROMPT = (
     "You are TASS (v{version}), a Terminal Assistant. The user is on {os} using {shell}. "
     "Your goal is to assist with terminal commands or technical queries. "
@@ -127,6 +166,15 @@ def setup_env():
                 console.print("[bold red]Invalid alias! Try again.[/bold red]")
         
         set_key(str(ENV_FILE), "TASS_SETUP_COMPLETE", "True")
+        
+        # Initialize default model settings if not present
+        if not os.getenv("TASS_MODEL"):
+            set_key(str(ENV_FILE), "TASS_MODEL", DEFAULT_MODEL)
+        if not os.getenv("TASS_USE_FALLBACK_MODEL"):
+            set_key(str(ENV_FILE), "TASS_USE_FALLBACK_MODEL", "True")
+        if not os.getenv("TASS_FALLBACK_MODEL"):
+            set_key(str(ENV_FILE), "TASS_FALLBACK_MODEL", DEFAULT_FALLBACK_MODEL)
+            
         console.print("\n[bold green]Setup complete![/bold green]")
         load_dotenv(ENV_FILE, override=True)
         
@@ -393,73 +441,91 @@ def run_query(query, api_key):
         set_system_prompt("reset")
         return run_query(query, api_key)
 
-    try:
-        client = genai.Client(api_key=api_key)
-        # Use streaming within the client context
-        stream = client.models.generate_content_stream(
-            model='gemini-2.0-flash', 
-            config={'system_instruction': system_prompt},
-            contents=query
-        )
+    current_model = get_current_model()
+    use_fallback, fallback_model = get_fallback_settings()
 
-        # Process stream
-        for chunk in stream:
-            text = chunk.text
-            full_response += text
+    def execute_request(model_to_use, is_fallback_attempt=False):
+        nonlocal full_response, header_captured, explanation_captured, header, explanation, breakdown
+        
+        full_response = ""
+        header_captured = False
+        explanation_captured = False
+        header = ""
+        explanation = ""
+        breakdown = ""
+
+        if is_fallback_attempt:
+            console.print(f"[bold yellow]Quota reached. Falling back to {model_to_use}...[/bold yellow]")
+
+        try:
+            client = genai.Client(api_key=api_key)
+            stream = client.models.generate_content_stream(
+                model=model_to_use,
+                config={'system_instruction': system_prompt},
+                contents=query
+            )
+
+            for chunk in stream:
+                text = chunk.text
+                full_response += text
+                
+                lines = full_response.split('\n')
+                if len(lines) > 1 and not header_captured:
+                    header = lines[0].strip()
+                    header_captured = True
+                    if header.upper() == "NONE":
+                        console.print("\n[bold cyan]TASS:[/bold cyan] ", end="")
+                    else:
+                        console.print("\n[bold white]Suggested Command:[/bold white]")
+                        console.print(Panel(Text(header, style="bold green"), border_style="cyan"))
+                        try:
+                            pyperclip.copy(header)
+                            console.print("[dim](Copied to clipboard)[/dim]")
+                        except (pyperclip.PyperclipException, Exception):
+                            pass
+
+                if len(lines) > 2 and not explanation_captured:
+                    explanation = lines[1].strip()
+                    explanation_captured = True
+                    if header.upper() != "NONE":
+                        console.print(f"[italic]{explanation}[/italic]\n")
+                    else:
+                        console.print(explanation, end="")
+
+                if explanation_captured:
+                    if header.upper() == "NONE":
+                        console.print(text.replace(lines[0] + '\n', '').replace(lines[1] + '\n', ''), end="")
+                    else:
+                        if "BREAKDOWN:" in text or breakdown:
+                            breakdown += text
             
-            # Simple parsing logic for streaming
-            lines = full_response.split('\n')
-            if len(lines) > 1 and not header_captured:
-                header = lines[0].strip()
-                header_captured = True
-                if header.upper() == "NONE":
-                    console.print("\n[bold cyan]TASS:[/bold cyan] ", end="")
-                else:
-                    console.print("\n[bold white]Suggested Command:[/bold white]")
-                    console.print(Panel(Text(header, style="bold green"), border_style="cyan"))
-                    try:
-                        pyperclip.copy(header)
-                        console.print("[dim](Copied to clipboard)[/dim]")
-                    except (pyperclip.PyperclipException, Exception):
-                        pass
+            if breakdown:
+                parts = breakdown.split("BREAKDOWN:")
+                if len(parts) > 1:
+                    console.print(Panel(parts[1].strip(), title="Command Breakdown", border_style="dim"))
 
-            if len(lines) > 2 and not explanation_captured:
-                explanation = lines[1].strip()
-                explanation_captured = True
-                if header.upper() != "NONE":
-                    console.print(f"[italic]{explanation}[/italic]\n")
-                else:
-                    console.print(explanation, end="")
+            console.print()
+            save_memory(query, full_response)
+            return True
 
-            if explanation_captured:
-                # Print the rest as it comes
-                # This is a bit simplified for the demo/implementation
-                if header.upper() == "NONE":
-                    console.print(text.replace(lines[0] + '\n', '').replace(lines[1] + '\n', ''), end="")
-                else:
-                    if "BREAKDOWN:" in text or breakdown:
-                        breakdown += text
-        
-        if breakdown:
-            # Final polish on breakdown display
-            parts = breakdown.split("BREAKDOWN:")
-            if len(parts) > 1:
-                console.print(Panel(parts[1].strip(), title="Command Breakdown", border_style="dim"))
+        except Exception as e:
+            error_msg = str(e)
+            if ("429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg) and not is_fallback_attempt and use_fallback:
+                if model_to_use != fallback_model:
+                    return execute_request(fallback_model, is_fallback_attempt=True)
+            
+            if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                console.print("\n[bold yellow]⚠️  API Quota Reached (429)[/bold yellow]")
+                console.print(f"The model '{model_to_use}' has reached its limit.")
+                console.print("\n[bold cyan]How to fix:[/bold cyan]")
+                console.print("1. Wait about 60 seconds and try again.")
+                console.print("2. Monitor your usage at: [link=https://aistudio.google.com/app/api-keys]Google AI Studio[/link]")
+                console.print("3. Check rate limits: [link=https://ai.google.dev/gemini-api/docs/rate-limits]Gemini API Docs[/link]")
+            else:
+                console.print(f"[bold red]Error calling Gemini API:[/bold red] {e}")
+            return False
 
-        console.print()
-        save_memory(query, full_response)
-        
-    except Exception as e:
-        error_msg = str(e)
-        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-            console.print("\n[bold yellow]⚠️  API Quota Reached (429)[/bold yellow]")
-            console.print("You've exceeded your current Gemini API rate limit.")
-            console.print("\n[bold cyan]How to fix:[/bold cyan]")
-            console.print("1. Wait about 60 seconds and try again.")
-            console.print("2. Monitor your usage at: [link=https://aistudio.google.com/app/api-keys]Google AI Studio[/link]")
-            console.print("3. Check rate limits: [link=https://ai.google.dev/gemini-api/docs/rate-limits]Gemini API Docs[/link]")
-        else:
-            console.print(f"[bold red]Error calling Gemini API:[/bold red] {e}")
+    if not execute_request(current_model):
         sys.exit(1)
 
 
@@ -565,7 +631,7 @@ def main():
             elif choice == "System Settings":
                 sys_choice = questionary.select(
                     "System Settings",
-                    choices=["Show System Prompt", "Edit System Prompt", "Set Memory Limit", "Back"]
+                    choices=["Show System Prompt", "Edit System Prompt", "Set Memory Limit", "Model Settings", "Back"]
                 ).ask()
                 if sys_choice == "Show System Prompt": 
                     handle_management_command(["/prompt", "show"])
@@ -577,6 +643,33 @@ def main():
                     limit = questionary.text("Enter memory limit (1-20)").ask()
                     if limit:
                         set_max_memory(limit)
+                        questionary.press_any_key_to_continue().ask()
+                elif sys_choice == "Model Settings":
+                    current_m = get_current_model()
+                    use_fb, fb_m = get_fallback_settings()
+                    
+                    model_choice = questionary.select(
+                        f"Model Settings (Current: {current_m})",
+                        choices=[
+                            "Change Primary Model",
+                            f"Toggle Fallback (Currently: {'ON' if use_fb else 'OFF'})",
+                            "Change Fallback Model",
+                            "Back"
+                        ]
+                    ).ask()
+                    
+                    if model_choice == "Change Primary Model":
+                        new_m = questionary.select("Select Primary Model", choices=SUPPORTED_MODELS).ask()
+                        if new_m:
+                            set_current_model(new_m)
+                    elif model_choice.startswith("Toggle Fallback"):
+                        set_fallback_settings(not use_fb, fb_m)
+                    elif model_choice == "Change Fallback Model":
+                        new_fb = questionary.select("Select Fallback Model", choices=SUPPORTED_MODELS).ask()
+                        if new_fb:
+                            set_fallback_settings(use_fb, new_fb)
+                    
+                    if model_choice != "Back":
                         questionary.press_any_key_to_continue().ask()
             
             elif choice == "Shell Integration":
