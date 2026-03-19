@@ -456,7 +456,7 @@ def run_query(query, api_key):
             console.print("You've exceeded your current Gemini API rate limit.")
             console.print("\n[bold cyan]How to fix:[/bold cyan]")
             console.print("1. Wait about 60 seconds and try again.")
-            console.print("2. Monitor your usage at: [link=https://aistudio.google.com/app/plan_and_billing]Google AI Studio[/link]")
+            console.print("2. Monitor your usage at: [link=https://aistudio.google.com/app/api-keys]Google AI Studio[/link]")
             console.print("3. Check rate limits: [link=https://ai.google.dev/gemini-api/docs/rate-limits]Gemini API Docs[/link]")
         else:
             console.print(f"[bold red]Error calling Gemini API:[/bold red] {e}")
