@@ -1,10 +1,8 @@
 import os
 import sys
 import platform
-import re
 from pathlib import Path
 from dotenv import load_dotenv, set_key, unset_key
-import pyfiglet
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -57,7 +55,7 @@ def validate_alias(alias):
 
 def get_user_aliases():
     """Get list of user-defined aliases from .env."""
-    load_dotenv(ENV_FILE)
+    load_dotenv(ENV_FILE, override=True)
     aliases_str = os.getenv("TASS_USER_ALIASES", "")
     return [a.strip() for a in aliases_str.split(",") if a.strip()]
 
@@ -95,7 +93,7 @@ def remove_user_alias(alias):
 
 def setup_env():
     """First-run wizard to set up API key and initial alias."""
-    load_dotenv(ENV_FILE)
+    load_dotenv(ENV_FILE, override=True)
     api_key = os.getenv("GEMINI_TASS_API_KEY")
     user_aliases = get_user_aliases()
     setup_done = os.getenv("TASS_SETUP_COMPLETE") == "True"
@@ -130,7 +128,7 @@ def setup_env():
         
         set_key(str(ENV_FILE), "TASS_SETUP_COMPLETE", "True")
         console.print("\n[bold green]Setup complete![/bold green]")
-        load_dotenv(ENV_FILE)
+        load_dotenv(ENV_FILE, override=True)
         
     return os.getenv("GEMINI_TASS_API_KEY")
 
@@ -161,7 +159,7 @@ def detect_shell():
 
 def get_system_prompt():
     """Get the current system prompt, preferring override from .env."""
-    load_dotenv(ENV_FILE)
+    load_dotenv(ENV_FILE, override=True)
     return os.getenv("TASS_SYSTEM_PROMPT_OVERRIDE", DEFAULT_SYSTEM_PROMPT)
 
 def set_system_prompt(prompt):
@@ -175,11 +173,11 @@ def set_system_prompt(prompt):
 
 def get_max_memory():
     """Get max memory from env, with a sensible limit of 20."""
-    load_dotenv(ENV_FILE)
+    load_dotenv(ENV_FILE, override=True)
     try:
         limit = int(os.getenv("TASS_MEMORY_LIMIT", 5))
         return min(max(1, limit), 20)
-    except:
+    except (ValueError, TypeError):
         return 5
 
 def set_max_memory(limit):
@@ -200,7 +198,7 @@ def load_memory():
         try:
             with open(MEMORY_FILE, "r") as f:
                 return json.load(f)
-        except:
+        except (json.JSONDecodeError, IOError):
             return []
     return []
 
@@ -264,7 +262,7 @@ def show_init_instructions():
     if shell == "PowerShell":
         for a in aliases:
             console.print(f"[green]Set-Alias -Name {a} -Value tass[/green]")
-        console.print(f"\n[dim]Profile path: $PROFILE[/dim]")
+        console.print("\n[dim]Profile path: $PROFILE[/dim]")
     elif shell == "Command Prompt (CMD)":
         for a in aliases:
             console.print(f"[green]doskey {a}=tass $*[/green]")
@@ -312,7 +310,8 @@ def integrate_shell():
 
 def handle_management_command(args):
     """Process management commands. Returns True if handled."""
-    if not args: return False
+    if not args:
+        return False
     cmd = args[0].lower()
     
     if cmd.startswith("/mem"):
@@ -420,14 +419,15 @@ def run_query(query, api_key):
             header = lines[0].strip()
             header_captured = True
             if header.upper() == "NONE":
-                console.print(f"\n[bold cyan]TASS:[/bold cyan] ", end="")
+                console.print("\n[bold cyan]TASS:[/bold cyan] ", end="")
             else:
-                console.print(f"\n[bold white]Suggested Command:[/bold white]")
+                console.print("\n[bold white]Suggested Command:[/bold white]")
                 console.print(Panel(Text(header, style="bold green"), border_style="cyan"))
                 try:
                     pyperclip.copy(header)
                     console.print("[dim](Copied to clipboard)[/dim]")
-                except: pass
+                except (pyperclip.PyperclipException, Exception):
+                    pass
 
         if len(lines) > 2 and not explanation_captured:
             explanation = lines[1].strip()
@@ -439,7 +439,6 @@ def run_query(query, api_key):
 
         if explanation_captured:
             # Print the rest as it comes
-            remaining = text
             # This is a bit simplified for the demo/implementation
             if header.upper() == "NONE":
                 console.print(text.replace(lines[0]+'\n', '').replace(lines[1]+'\n', ''), end="")
@@ -508,8 +507,9 @@ def main():
             
             if choice == "Ask a Question":
                 query = questionary.text("How can I help you?").ask()
-                if not query: continue
-                
+                if not query:
+                    continue
+
                 if query.lower().strip() in ["/reset", "reset"]:
                     if questionary.confirm("COMPLETELY RESET TASS?").ask():
                         reset_tass()
@@ -529,15 +529,18 @@ def main():
                     handle_management_command(["/alias", "list"])
                 elif alias_choice == "Add Alias":
                     new_alias = questionary.text("Enter new alias").ask()
-                    if new_alias: add_user_alias(new_alias)
+                    if new_alias:
+                        add_user_alias(new_alias)
                 elif alias_choice == "Remove Alias":
                     aliases = get_user_aliases()
                     if not aliases:
                         console.print("[dim]No user aliases to remove.[/dim]")
                     else:
                         to_remove = questionary.select("Select alias to remove", choices=aliases).ask()
-                        if to_remove: remove_user_alias(to_remove)
-                if alias_choice != "Back": questionary.press_any_key_to_continue().ask()
+                        if to_remove:
+                            remove_user_alias(to_remove)
+                if alias_choice != "Back":
+                    questionary.press_any_key_to_continue().ask()
 
             elif choice == "Manage Memory":
                 mem_choice = questionary.select(
