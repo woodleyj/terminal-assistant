@@ -397,6 +397,15 @@ def handle_management_command(args):
             console.print("[dim]Use 'tass /alias add <name>' or 'tass /alias remove <name>' to manage.[/dim]")
         return True
     
+    elif cmd.startswith("/model"):
+        subcmd = args[1].lower() if len(args) > 1 else "show"
+        if subcmd == "show":
+            current_m = get_current_model()
+            use_fb, fb_m = get_fallback_settings()
+            console.print(f"[bold cyan]Primary Model:[/bold cyan] {current_m}")
+            console.print(f"[bold cyan]Fallback:[/bold cyan] {'Enabled' if use_fb else 'Disabled'} ({fb_m})")
+        return True
+    
     elif cmd.startswith("/init"):
         show_init_instructions()
         return True
@@ -565,7 +574,8 @@ def main():
         while True:
             console.clear()
             console.print(Text(TASS_BANNER, style="bold yellow"))
-            console.print(Panel(f"Terminal Assistant v{VERSION}", expand=False, border_style="cyan"))
+            current_m = get_current_model()
+            console.print(Panel(f"Terminal Assistant v{VERSION} | Model: [bold green]{current_m}[/bold green]", expand=False, border_style="cyan"))
             
             choice = questionary.select(
                 "Main Menu",
