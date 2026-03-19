@@ -1,7 +1,5 @@
 import unittest
 import os
-import json
-from pathlib import Path
 from assistant.main import (
     get_max_memory, 
     save_memory, 
