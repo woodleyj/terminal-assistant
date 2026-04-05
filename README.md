@@ -9,7 +9,7 @@
     ╚═╝   ╚═╝  ╚═╝╚══════╝╚══════╝
 ```
 
-**TASS** is a professional-grade, lightweight AI assistant designed for your terminal. It translates natural language queries into precise terminal commands, specifically tailored to your Operating System and Shell environment.
+**TASS** is a lightweight AI assistant designed for your terminal. It translates natural language queries into precise terminal commands, specifically tailored to your Operating System and Shell environment.
 
 ---
 
